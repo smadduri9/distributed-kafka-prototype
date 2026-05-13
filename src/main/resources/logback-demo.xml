@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Console appender for general output -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Sifting appender for node-specific logs based on MDC nodeId -->
+    <appender name="NODE_SIFT" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <discriminator>
+            <key>nodeId</key>
+            <defaultValue>default</defaultValue>
+        </discriminator>
+        <sift>
+            <appender name="NODE_FILE-${nodeId}" class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <file>logs/demo-node-${nodeId}.log</file>
+                <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+                    <fileNamePattern>logs/demo-node-${nodeId}.%i.log</fileNamePattern>
+                    <minIndex>1</minIndex>
+                    <maxIndex>5</maxIndex>
+                </rollingPolicy>
+                <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+                    <maxFileSize>10MB</maxFileSize>
+                </triggeringPolicy>
+                <encoder>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+                </encoder>
+            </appender>
+        </sift>
+    </appender>
+
+    <!-- Sifting appender for broker-specific logs based on MDC brokerId -->
+    <appender name="BROKER_SIFT" class="ch.qos.logback.classic.sift.SiftingAppender">
+        <discriminator>
+            <key>brokerId</key>
+            <defaultValue>default</defaultValue>
+        </discriminator>
+        <sift>
+            <appender name="BROKER_FILE-${brokerId}" class="ch.qos.logback.core.rolling.RollingFileAppender">
+                <file>logs/demo-broker-${brokerId}.log</file>
+                <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+                    <fileNamePattern>logs/demo-broker-${brokerId}.%i.log</fileNamePattern>
+                    <minIndex>1</minIndex>
+                    <maxIndex>5</maxIndex>
+                </rollingPolicy>
+                <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+                    <maxFileSize>10MB</maxFileSize>
+                </triggeringPolicy>
+                <encoder>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+                </encoder>
+            </appender>
+        </sift>
+    </appender>
+
+    <!-- File appender for controller logs -->
+    <appender name="CONTROLLER_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/demo-controller.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
+            <fileNamePattern>logs/demo-controller.%i.log</fileNamePattern>
+            <minIndex>1</minIndex>
+            <maxIndex>5</maxIndex>
+        </rollingPolicy>
+        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
+            <maxFileSize>10MB</maxFileSize>
+        </triggeringPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Logger for Raft nodes - uses sifting appender -->
+    <logger name="com.kafkads.consensus" level="INFO" additivity="false">
+        <appender-ref ref="NODE_SIFT" />
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- Logger for brokers - uses sifting appender -->
+    <logger name="com.kafkads.broker" level="INFO" additivity="false">
+        <appender-ref ref="BROKER_SIFT" />
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- Logger for controller -->
+    <logger name="com.kafkads.controller" level="INFO" additivity="false">
+        <appender-ref ref="CONTROLLER_FILE" />
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- Logger for replication -->
+    <logger name="com.kafkads.replication" level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </logger>
+    
+    <!-- Logger for demo -->
+    <logger name="com.kafkads.demo" level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </logger>
+
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>

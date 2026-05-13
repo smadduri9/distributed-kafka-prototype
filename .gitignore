@@ -1,0 +1,39 @@
+# Gradle
+.gradle/
+build/
+*.gradle
+!build.gradle
+!settings.gradle
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs (keep directory structure but ignore log files)
+logs/*.log
+!logs/.gitkeep
+
+# Data directories
+/data/
+/demo-data/
+/test-data/
+/storage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compiled
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+*.war
+*.ear
+
+# Test
+test-results/
+
