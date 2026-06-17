@@ -17,3 +17,6 @@ dependency-reduced-pom.xml
 
 # Logs
 *.log
+
+# Runtime broker data
+data/
