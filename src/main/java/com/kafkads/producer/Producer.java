@@ -152,7 +152,7 @@ public class Producer {
                 byte[] responseBytes = new byte[in.readableBytes()];
                 in.readBytes(responseBytes);
                 
-                // Parse response (simplified)
+                // Parse response
                 ByteBuffer buffer = ByteBuffer.wrap(responseBytes);
                 byte responseType = buffer.get();
                 short errorCode = buffer.getShort();

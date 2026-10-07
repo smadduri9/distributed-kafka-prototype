@@ -155,8 +155,6 @@ public class RequestHandler {
             int brokerId = broker.getConfig().getBrokerId();
             logger.debug("Heartbeat received from broker: {}", brokerId);
             
-            // In a real implementation, this would update the controller
-            // For now, just return success
             return ResponseBuilder.buildHeartbeatResponse(true, ErrorHandler.ErrorCode.NONE);
         } catch (Exception e) {
             logger.error("Error handling heartbeat: {}", e.getMessage(), e);

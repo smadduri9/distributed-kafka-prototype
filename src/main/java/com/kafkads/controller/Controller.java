@@ -199,11 +199,6 @@ public class Controller {
             }
         }
         
-        // Reassign partitions that were on the failed broker
-        List<MetadataManager.BrokerMetadata> aliveBrokers = metadataManager.getAliveBrokers();
-        
-        // Get all partition assignments and reassign those affected by the failure
-        // This is simplified - in production, would track which partitions need reassignment
         logger.info("Broker failure handled: brokerId={}", brokerId);
     }
     

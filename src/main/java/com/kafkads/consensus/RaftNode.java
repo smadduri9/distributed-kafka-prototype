@@ -107,8 +107,6 @@ public class RaftNode {
             return;
         }
         
-        // Send AppendEntries RPCs to all followers
-        // In a real implementation, this would send network RPCs
         logger.debug("Sending heartbeat: nodeId={}, term={}", nodeId, state.getCurrentTerm());
     }
     

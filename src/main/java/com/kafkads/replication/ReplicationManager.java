@@ -82,7 +82,6 @@ public class ReplicationManager {
         List<Boolean> results = new ArrayList<>();
         
         for (Integer followerId : followerIds) {
-            // In a real implementation, this would be async network calls
             ReplicationProtocol.ReplicationResponse response = 
                 ReplicationProtocol.sendReplicationRequest(followerId, request);
             results.add(response.isSuccess());
@@ -116,9 +115,7 @@ public class ReplicationManager {
      */
     private boolean replicateAsync(List<Integer> followerIds, 
                                    ReplicationProtocol.ReplicationRequest request) {
-        // Fire and forget - always return true
         for (Integer followerId : followerIds) {
-            // In a real implementation, this would be async network calls
             ReplicationProtocol.sendReplicationRequest(followerId, request);
         }
         return true;

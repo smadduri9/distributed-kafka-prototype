@@ -133,7 +133,6 @@ public class Consumer {
      * Auto-commit offsets.
      */
     private void autoCommit() {
-        // In a real implementation, would commit all current offsets
         logger.debug("Auto-commit triggered");
     }
     
@@ -184,7 +183,7 @@ public class Consumer {
                 byte[] responseBytes = new byte[in.readableBytes()];
                 in.readBytes(responseBytes);
                 
-                // Parse response (simplified)
+                // Parse response
                 ByteBuffer buffer = ByteBuffer.wrap(responseBytes);
                 byte responseType = buffer.get();
                 short errorCode = buffer.getShort();

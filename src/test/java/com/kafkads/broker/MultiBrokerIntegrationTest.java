@@ -195,7 +195,7 @@ public class MultiBrokerIntegrationTest {
         // Wait for election
         Thread.sleep(600);
         
-        // Count leaders (should be 0 or 1 in real implementation)
+        // Count leaders
         long leaderCount = nodes.stream()
             .filter(RaftNode::isLeader)
             .count();

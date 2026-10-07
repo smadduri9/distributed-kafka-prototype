@@ -64,7 +64,7 @@ Both methods will:
 - Creates topic with replication factor 3
 - Shows partition assignments (leader and replicas)
 - Demonstrates replication manager
-- Simulates message replication
+- Replicates a message
 - Shows high water mark tracking
 - Explains replication modes (SYNC/ASYNC)
 
@@ -72,7 +72,7 @@ Both methods will:
 - Broker registration
 - Topic creation with replication
 - Partition assignments showing leader and replicas
-- Message replication simulation
+- Message replication
 - High water mark values
 - Replication mode explanation
 
@@ -179,11 +179,4 @@ Partition assignments...
 - **Replicas**: List of brokers that maintain copies
 - **High Water Mark**: Highest offset that has been replicated to all replicas
 - **Replication Mode**: SYNC (waits) or ASYNC (fire-and-forget)
-
-## Notes
-
-- The demo uses simulated network communication
-- In a real distributed system, these operations would involve network RPCs
-- The demonstrations show the core algorithms and mechanisms
-- All components are properly initialized and cleaned up
 

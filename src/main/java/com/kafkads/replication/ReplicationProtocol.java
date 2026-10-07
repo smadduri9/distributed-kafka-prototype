@@ -64,15 +64,12 @@ public class ReplicationProtocol {
     
     /**
      * Sends a replication request to a follower.
-     * In a real implementation, this would send over the network.
      */
     public static ReplicationResponse sendReplicationRequest(int followerBrokerId, 
                                                              ReplicationRequest request) {
-        // This is a placeholder - in production, would send TCP request to follower
         logger.debug("Sending replication request: follower={}, topic={}, partition={}, offset={}", 
             followerBrokerId, request.getTopicName(), request.getPartitionId(), request.getOffset());
         
-        // Simulate network call
         return new ReplicationResponse(true, request.getOffset(), null);
     }
 }

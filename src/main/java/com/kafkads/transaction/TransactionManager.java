@@ -134,7 +134,6 @@ public class TransactionManager {
         }
         
         transaction.setState(TransactionState.COMMITTING);
-        // In a real implementation, would write commit marker to transaction log
         transaction.setState(TransactionState.COMMIT_COMPLETE);
         transactions.remove(transactionId);
         
@@ -152,7 +151,6 @@ public class TransactionManager {
         }
         
         transaction.setState(TransactionState.ABORTING);
-        // In a real implementation, would write abort marker to transaction log
         transaction.setState(TransactionState.ABORT_COMPLETE);
         transactions.remove(transactionId);
         

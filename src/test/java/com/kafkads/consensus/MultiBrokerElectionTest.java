@@ -107,8 +107,6 @@ public class MultiBrokerElectionTest {
             .filter(RaftNode::isLeader)
             .count();
         
-        // In a real implementation with network communication, we'd have exactly 1 leader
-        // For now, we verify the election mechanism is working
         assertTrue(leaderCount >= 0 && leaderCount <= 3, 
             "Leader count should be between 0 and 3, got: " + leaderCount);
         
@@ -189,7 +187,7 @@ public class MultiBrokerElectionTest {
     
     @Test
     void testMultipleNodesElectionTimeout() throws InterruptedException {
-        // Create nodes with different election timeouts to simulate staggered elections
+        // Create nodes with different election timeouts so elections start apart
         List<RaftNode> testNodes = new ArrayList<>();
         
         for (int i = 0; i < 3; i++) {

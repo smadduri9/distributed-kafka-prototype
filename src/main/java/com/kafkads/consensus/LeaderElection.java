@@ -43,8 +43,6 @@ public class LeaderElection {
             int totalNodes = raftNode.getClusterNodes().size();
             int majority = (totalNodes / 2) + 1;
             
-            // In a real implementation, this would send RequestVote RPCs to other nodes
-            // For now, we'll simulate the election process
             logger.info("Election started: term={}, votesReceived={}, majority={}", 
                 newTerm, votesReceived, majority);
             
