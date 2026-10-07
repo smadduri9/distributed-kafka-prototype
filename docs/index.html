@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Distributed Kafka Prototype · Sriram Madduri</title>
+  <meta name="description" content="A Java message broker built from scratch: partitioned offset logs, a Netty binary protocol, failure detection, partition assignment, and a Raft-inspired election demo.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="wrap">
+    <p class="kicker">Sriram Madduri · Java · distributed systems</p>
+    <h1>Distributed Kafka prototype</h1>
+    <p class="lead">Built a distributed message broker from scratch in Java with partitioned offset-based logs, producer/consumer APIs over a custom Netty binary protocol, replication, failure detection, partition assignment, and Raft-inspired leader election.</p>
+    <div class="actions">
+      <a class="button" href="https://github.com/smadduri9/distributed-kafka-prototype">Read the code</a>
+      <a class="button secondary" href="https://github.com/smadduri9/distributed-kafka-prototype#how-to-run-it">Run it locally</a>
+    </div>
+
+    <section>
+      <h2>Scope</h2>
+      <div class="grid">
+        <article class="card real">
+          <h3>Runs</h3>
+          <ul>
+            <li>Append-only partition logs. Produce returns an offset. Fetch reads from an offset. Records stay on disk.</li>
+            <li>A Netty broker on port 9092 with a small binary request frame.</li>
+            <li>Heartbeats that refresh a Redis key for 10 seconds. A missing key means the broker is dead. Memory is the fallback.</li>
+            <li>Controller partition assignment, cached in Redis, decided in memory.</li>
+            <li>A local UI on port 8080 for topics, produce, and fetch.</li>
+          </ul>
+        </article>
+        <article class="card demo">
+          <h3>Demonstrated in process</h3>
+          <ul>
+            <li>Raft-style state, terms, and votes. The demo does this inside one process.</li>
+            <li>Follower acknowledgement and a high-water mark, also inside one process.</li>
+            <li>SSL, ACLs, and transactions exist as scaffolding.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Path of a record</h2>
+      <div class="flow">
+        <div class="step">
+          <strong>Producer or consumer</strong>
+          <span>Custom binary request over TCP.</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step">
+          <strong>Netty broker</strong>
+          <span>Appends to the partition file and returns the offset. Fetch starts at an offset.</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step">
+          <strong>Controller</strong>
+          <span>Assigns leaders and replicas. Each heartbeat refreshes <code>kafkads:broker:{id}</code> with a 10-second TTL.</span>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="step">
+          <strong>Demos beside the log</strong>
+          <span>Replication and leader election exercise the state machine without a multi-machine RPC mesh.</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Where to look</h2>
+      <div class="inspect">
+        <a href="https://github.com/smadduri9/distributed-kafka-prototype/blob/main/src/main/java/com/kafkads/broker/storage/LogSegment.java">
+          <code>LogSegment.java</code>
+          Append and fetch by offset.
+        </a>
+        <a href="https://github.com/smadduri9/distributed-kafka-prototype/blob/main/src/main/java/com/kafkads/protocol/RequestParser.java">
+          <code>RequestParser.java</code>
+          Type, version, length, body.
+        </a>
+        <a href="https://github.com/smadduri9/distributed-kafka-prototype/blob/main/src/main/java/com/kafkads/controller/RedisClusterCache.java">
+          <code>RedisClusterCache.java</code>
+          TTL liveness and the assignment hash.
+        </a>
+        <a href="https://github.com/smadduri9/distributed-kafka-prototype/blob/main/src/main/java/com/kafkads/controller/Controller.java">
+          <code>Controller.java</code>
+          Registration, assignment, dead-broker detection.
+        </a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Run it</h2>
+      <pre>./gradlew test --no-daemon
+./gradlew run --no-daemon</pre>
+      <p class="note">Java 11 or newer. Then open localhost:8080. Redis on localhost:6379 is optional. <code>REDIS_ENABLED=false</code> keeps liveness in memory. The page you are reading is a static brief. The broker runs on your machine.</p>
+    </section>
+
+    <footer>
+      Sriram Madduri · <a href="https://github.com/smadduri9/distributed-kafka-prototype">distributed-kafka-prototype</a>
+    </footer>
+  </main>
+</body>
+</html>

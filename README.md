@@ -1,174 +1,104 @@
 # Distributed Kafka Prototype
 
-A Java implementation of core ideas behind a Kafka-style distributed log: brokers, topics, partitions, append-only message storage, custom producer/consumer protocol handling, controller metadata, broker heartbeats, replication flow, and Raft-inspired leader election.
+Built a distributed message broker from scratch in Java with partitioned offset-based logs, producer/consumer APIs over a custom Netty binary protocol, replication, failure detection, partition assignment, and Raft-inspired leader election.
 
-## Problem Statement
+A short visual brief is at [smadduri9.github.io/distributed-kafka-prototype](https://smadduri9.github.io/distributed-kafka-prototype/).
 
-Distributed messaging systems need to accept writes, store ordered records durably, let consumers read from offsets, and keep cluster metadata healthy while brokers join, fail, or replicate data. This project explores those mechanics from first principles instead of using Kafka as a dependency.
+## What is real
 
-## What I Built
+- **Partitioned log.** Each topic partition is an append-only file. Produce returns an offset. Fetch reads from an offset. Records are written through a file channel, so they are still there after a restart.
+- **Binary protocol.** Producers and consumers use a small Netty framing: request type, version, body length, body. The broker listens on port 9092.
+- **Failure detection.** A heartbeat refreshes a Redis key with a 10-second TTL. When that key expires, the controller marks the broker dead. With Redis off, the same timeout is tracked in memory.
+- **Partition assignment.** The controller chooses a leader and replicas for each partition and writes that map to Redis. The controller's in-memory map is the source of truth.
+- **Local UI.** `./gradlew run` starts the broker and an HTTP UI on port 8080 for creating topics and producing or fetching records.
 
-This repository is Sriram Madduri's implementation of a Kafka-like prototype with:
+Consumer offsets stay in a local file. Redis holds the shared, expiring cluster view: liveness keys and the current assignment map.
 
-- Topic and partition management inside a broker.
-- Append-only per-partition message storage with offset-based fetches.
-- Netty-based TCP server path and custom binary request/response builders.
-- Producer and consumer clients for produce/fetch workflows.
-- Controller metadata for broker registration, partition assignment, and broker liveness.
-- Heartbeat-based failure detection and partition reassignment hooks.
-- Replication manager and follower synchronization flow for leader/follower replicas.
-- Raft-inspired node state, term tracking, request-vote handling, and election timeout demo.
-- REST API and small static web UI for local broker interaction.
+## What is a prototype
 
-The implementation is intentionally educational and prototype-oriented. The Raft and replication demos simulate parts of the distributed network path, while broker storage, local produce/fetch, controller metadata, and heartbeat behavior are executable.
+The election demo advances Raft-style node state, terms, and votes inside one process. The replication demo records follower acknowledgements and a high-water mark inside one process. SSL, ACLs, and transactions are scaffolding.
 
-## Tech Stack
+This is a from-scratch study of the mechanics.
 
-- Java 11
-- Gradle 8.5 wrapper
-- Netty for broker networking
-- Java HTTP server for the REST API and static UI
-- JUnit 5 and Mockito for tests
-- SLF4J and Logback for structured logs
-- Snappy and Gzip compression modules
-- Redis for broker liveness keys with a TTL, and a cache of partition assignments
+## How to run it
 
-## Architecture
-
-```text
-src/main/java/com/kafkads
-├── api/           REST API server and static web UI serving
-├── broker/        Broker, topic, partition, heartbeat, and log storage
-├── compression/   Compression codec abstraction and implementations
-├── config/        Broker configuration loading and environment overrides
-├── consensus/     Raft-style node state, election, and log replication concepts
-├── consumer/      Consumer client and offset management
-├── controller/    Cluster metadata, partition assignment, broker tracking
-├── producer/      Producer client and producer configuration
-├── protocol/      Binary request parsing and response construction
-├── replication/   Leader/follower replication protocol and synchronization
-├── security/      SSL and ACL support scaffolding
-├── transaction/   Transaction coordinator and manager scaffolding
-└── util/          Error handling and concurrency helpers
-```
-
-At a high level:
-
-```text
-Producer/Consumer
-      |
-      v
-Netty Broker TCP API ---- append/fetch ---- LogSegment storage
-      |
-      v
-Controller metadata ---- heartbeats ---- Redis TTL liveness + assignment cache
-      |
-      v
-Replication manager ---- follower sync ---- high-water mark tracking
-      |
-      v
-Raft-inspired consensus state and leader election demo
-```
-
-## Quick Local Run
-
-Prerequisites:
-
-- Java 11 or newer
-- No system Gradle installation required; the Gradle wrapper is included
-
-Build and test:
+Java 11 or newer. The Gradle wrapper is in the repo.
 
 ```bash
 ./gradlew test --no-daemon
-```
-
-Run the broker, REST API, and web UI:
-
-```bash
 ./gradlew run --no-daemon
 ```
 
-Then open:
+Open [http://localhost:8080](http://localhost:8080).
 
-```text
-http://localhost:8080
-```
-
-Optional configuration is loaded from `src/main/resources/application.properties` and can be overridden with environment variables:
-
-```bash
-BROKER_PORT=9092 BROKER_DATA_DIR=./data/broker ./gradlew run --no-daemon
-```
-
-Broker heartbeats refresh a Redis key at `localhost:6379` (`redis-server`) with a 10-second TTL, and partition assignments are cached beside that. Partition logs and consumer offsets stay on disk. Set `REDIS_ENABLED=false` to keep liveness in memory only.
-
-## Full Experiment Workflow
-
-Run the end-to-end feature demo:
+Optional Redis on `localhost:6379` (`redis-server`) stores liveness keys and the assignment cache. `REDIS_ENABLED=false` keeps that state in memory.
 
 ```bash
 ./gradlew runDemo --no-daemon
 ```
 
-The demo exercises:
+runs the election, heartbeat, assignment, and replication demonstrations. Logs land in `logs/`.
 
-- Raft-inspired leader election state transitions and term increments across three nodes.
-- Broker heartbeat registration, periodic liveness tracking, timeout detection, and dead-broker marking.
-- Controller-driven topic creation with two partitions and replication factor three.
-- Partition leader/replica assignment across three brokers.
-- Simulated synchronous replication and follower acknowledgment flow.
+## What to inspect
 
-The demo writes logs to `logs/`:
+- [Log segment](src/main/java/com/kafkads/broker/storage/LogSegment.java) — append and fetch by offset
+- [Request parser](src/main/java/com/kafkads/protocol/RequestParser.java) — binary framing
+- [Redis cluster cache](src/main/java/com/kafkads/controller/RedisClusterCache.java) — TTL heartbeats and the assignment hash
+- [Controller](src/main/java/com/kafkads/controller/Controller.java) — registration, assignment, and dead-broker detection
 
 ```text
-logs/demo-node-*.log
-logs/demo-broker-*.log
-logs/demo-controller.log
+Producer / Consumer
+        |
+        v
+Netty broker (port 9092) ---- append / fetch ---- partition log on disk
+        |
+        v
+Controller ---- heartbeat ---- Redis TTL key + assignment cache
+        |
+        +---- replication demo (in process)
+        +---- Raft-inspired election demo (in process)
 ```
 
-Useful follow-up commands:
+## Design notes
 
-```bash
-./gradlew clean test --no-daemon
-./gradlew runDemo --no-daemon
+Stack: Java 11, Gradle 8.5 wrapper, Netty, a small Java HTTP server for the UI, JUnit 5, SLF4J and Logback, Snappy and Gzip, Redis (Jedis) for liveness and assignment cache.
+
+```text
+src/main/java/com/kafkads
+├── api/           REST API and static UI
+├── broker/        Broker, topics, partitions, heartbeats, log storage
+├── compression/   Codec interface, Gzip, Snappy
+├── config/        Properties and environment overrides
+├── consensus/     Raft-style state, election, log replication demo
+├── consumer/      Consumer client and file-backed offsets
+├── controller/    Metadata, assignment, Redis cluster cache
+├── producer/      Producer client
+├── protocol/      Binary request parsing and responses
+├── replication/   Leader/follower sync and high-water mark
+├── security/      SSL and ACL scaffolding
+├── transaction/   Transaction scaffolding
+└── util/          Errors and concurrency helpers
 ```
 
-## Results
+The feature demo covers:
 
-Latest local verification:
+- Election state transitions and term increments across three nodes.
+- Heartbeat registration, timeout detection, and dead-broker marking.
+- Topic creation with two partitions and replication factor three.
+- Leader and replica assignment across three brokers.
+- A simulated replicate-and-acknowledge path.
 
-- `./gradlew test --no-daemon`: passed.
-- `./gradlew runDemo --no-daemon`: passed.
-- Heartbeat demo: broker status changed to `DEAD` after heartbeat shutdown and timeout detection.
-- Replication demo: created topic `replicated-topic` with 2 partitions and replication factor 3.
-- Partition assignment demo:
-  - Partition 0 leader: broker 1; replicas: `[1, 2, 3]`
-  - Partition 1 leader: broker 2; replicas: `[2, 3, 1]`
-- Replication demo: simulated message replicated successfully and high-water mark reached offset `0`.
+A previous local run of `./gradlew test` and `./gradlew runDemo` completed, marked a broker `DEAD` after the heartbeat stopped, assigned partition 0 to broker 1 with replicas `[1, 2, 3]` and partition 1 to broker 2 with replicas `[2, 3, 1]`, and advanced the demo high-water mark to offset `0`.
 
-Reproducible demo path:
+Subsystem notes:
 
-```bash
-./gradlew clean test runDemo --no-daemon
-```
-
-The leader election demo currently shows election timeouts, candidate transitions, voting state, and term increments. It does not implement full inter-node RequestVote RPC networking yet, so the demo is best interpreted as a consensus-state prototype rather than a production Raft implementation.
-
-## Reference Material
-
-Additional implementation notes are kept as reference documentation:
-
-- `DEMO.md`
-- `FRONTEND.md`
-- `HEARTBEAT.md`
-- `LOGS.md`
-- `README-LOGS.md`
-- `LOG-FILES-SUMMARY.md`
-
-These files document specific subsystems and demo usage; the README is the primary ownership and project overview.
+- [DEMO.md](DEMO.md)
+- [FRONTEND.md](FRONTEND.md)
+- [HEARTBEAT.md](HEARTBEAT.md)
+- [LOGS.md](LOGS.md)
+- [README-LOGS.md](README-LOGS.md)
+- [LOG-FILES-SUMMARY.md](LOG-FILES-SUMMARY.md)
 
 ## License
 
 MIT
-
