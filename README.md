@@ -31,6 +31,7 @@ The implementation is intentionally educational and prototype-oriented. The Raft
 - JUnit 5 and Mockito for tests
 - SLF4J and Logback for structured logs
 - Snappy and Gzip compression modules
+- Redis for broker liveness keys with a TTL, and a cache of partition assignments
 
 ## Architecture
 
@@ -60,7 +61,7 @@ Producer/Consumer
 Netty Broker TCP API ---- append/fetch ---- LogSegment storage
       |
       v
-Controller metadata ---- heartbeats ---- broker liveness
+Controller metadata ---- heartbeats ---- Redis TTL liveness + assignment cache
       |
       v
 Replication manager ---- follower sync ---- high-water mark tracking
@@ -99,6 +100,8 @@ Optional configuration is loaded from `src/main/resources/application.properties
 ```bash
 BROKER_PORT=9092 BROKER_DATA_DIR=./data/broker ./gradlew run --no-daemon
 ```
+
+Broker heartbeats refresh a Redis key at `localhost:6379` (`redis-server`) with a 10-second TTL, and partition assignments are cached beside that. Partition logs and consumer offsets stay on disk. Set `REDIS_ENABLED=false` to keep liveness in memory only.
 
 ## Full Experiment Workflow
 

@@ -2,6 +2,7 @@ package com.kafkads.broker;
 
 import com.kafkads.config.BrokerConfig;
 import com.kafkads.controller.Controller;
+import com.kafkads.controller.DisabledClusterCache;
 import com.kafkads.controller.MetadataManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,7 +30,7 @@ public class BrokerHeartbeatTest {
         props.setProperty("broker.data.dir", "./test-data/broker");
         config = new BrokerConfig(props);
         broker = new Broker(config);
-        controller = new Controller();
+        controller = new Controller(DisabledClusterCache.INSTANCE);
         controller.start();
         controller.registerBroker(1, "localhost", 9092);
         heartbeat = new BrokerHeartbeat(broker, controller);

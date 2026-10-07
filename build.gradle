@@ -22,6 +22,9 @@ dependencies {
     
     // Compression
     implementation 'org.xerial.snappy:snappy-java:1.1.10.3'
+
+    // Consumer-group offset commits
+    implementation 'redis.clients:jedis:5.1.5'
     
     // Testing
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.0'

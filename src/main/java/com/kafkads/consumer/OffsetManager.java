@@ -3,7 +3,10 @@ package com.kafkads.consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.*;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,20 +16,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manages consumer offsets for tracking consumption progress.
+ * Offsets stay in a local file. Redis is reserved for broker liveness and assignment cache.
  */
 public class OffsetManager {
     private static final Logger logger = LoggerFactory.getLogger(OffsetManager.class);
-    
+
     private final String groupId;
     private final Path offsetFilePath;
     private final ConcurrentHashMap<String, Long> offsets = new ConcurrentHashMap<>();
-    
+
     public OffsetManager(String groupId, String dataDir) {
         this.groupId = groupId;
         this.offsetFilePath = Paths.get(dataDir, "offsets", groupId + ".offsets");
         loadOffsets();
     }
-    
+
     /**
      * Commits an offset for a topic partition.
      */
@@ -34,10 +38,10 @@ public class OffsetManager {
         String key = topicName + "-" + partitionId;
         offsets.put(key, offset);
         saveOffsets();
-        logger.debug("Offset committed: group={}, topic={}, partition={}, offset={}", 
+        logger.debug("Offset committed: group={}, topic={}, partition={}, offset={}",
             groupId, topicName, partitionId, offset);
     }
-    
+
     /**
      * Gets the committed offset for a topic partition.
      */
@@ -45,7 +49,7 @@ public class OffsetManager {
         String key = topicName + "-" + partitionId;
         return offsets.get(key);
     }
-    
+
     /**
      * Loads offsets from disk.
      */
@@ -54,7 +58,7 @@ public class OffsetManager {
             logger.debug("Offset file does not exist: {}", offsetFilePath);
             return;
         }
-        
+
         try (ObjectInputStream ois = new ObjectInputStream(
             new FileInputStream(offsetFilePath.toFile()))) {
             @SuppressWarnings("unchecked")
@@ -65,7 +69,7 @@ public class OffsetManager {
             logger.error("Error loading offsets", e);
         }
     }
-    
+
     /**
      * Saves offsets to disk.
      */
@@ -80,9 +84,8 @@ public class OffsetManager {
             logger.error("Error saving offsets", e);
         }
     }
-    
+
     public void close() {
         saveOffsets();
     }
 }
-

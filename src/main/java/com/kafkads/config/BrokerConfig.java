@@ -67,6 +67,13 @@ public class BrokerConfig {
     
     // ACL settings
     private final boolean aclEnabled;
+
+    // Redis settings for committed consumer offsets
+    private final boolean redisEnabled;
+    private final String redisHost;
+    private final int redisPort;
+    private final String redisPassword;
+    private final int redisTimeoutMs;
     
     public BrokerConfig(Properties properties) {
         this.properties = properties;
@@ -124,8 +131,16 @@ public class BrokerConfig {
         
         // ACL settings
         this.aclEnabled = getBooleanProperty("acl.enabled", false);
+
+        // Redis settings
+        this.redisEnabled = getBooleanProperty("redis.enabled", true);
+        this.redisHost = getStringProperty("redis.host", "localhost");
+        this.redisPort = getIntProperty("redis.port", 6379);
+        this.redisPassword = getStringProperty("redis.password", "");
+        this.redisTimeoutMs = getIntProperty("redis.timeout.ms", 2000);
         
-        logger.info("Broker configuration loaded: brokerId={}, port={}, dataDir={}", brokerId, brokerPort, dataDir);
+        logger.info("Broker configuration loaded: brokerId={}, port={}, dataDir={}, redis={}:{}",
+            brokerId, brokerPort, dataDir, redisHost, redisPort);
     }
     
     private String getStringProperty(String key, String defaultValue) {
@@ -197,5 +212,14 @@ public class BrokerConfig {
     public String getSslTruststoreLocation() { return sslTruststoreLocation; }
     public String getSslTruststorePassword() { return sslTruststorePassword; }
     public boolean isAclEnabled() { return aclEnabled; }
+    public boolean isRedisEnabled() { return redisEnabled; }
+    public String getRedisHost() { return redisHost; }
+    public int getRedisPort() { return redisPort; }
+    public String getRedisPassword() { return redisPassword; }
+    public int getRedisTimeoutMs() { return redisTimeoutMs; }
+
+    public RedisConfig toRedisConfig() {
+        return new RedisConfig(redisEnabled, redisHost, redisPort, redisPassword, redisTimeoutMs);
+    }
 }
 

@@ -1,5 +1,7 @@
 package com.kafkads.controller;
 
+import com.kafkads.config.ConfigLoader;
+import com.kafkads.config.RedisConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -16,13 +18,29 @@ public class Controller {
     private static final Logger logger = LoggerFactory.getLogger(Controller.class);
     
     private final MetadataManager metadataManager;
+    private final ClusterCache clusterCache;
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private volatile boolean running = false;
-    private static final long BROKER_TIMEOUT_MS = 10000; // 10 seconds
+    static final long BROKER_TIMEOUT_MS = 10000; // 10 seconds
+    static final int BROKER_TTL_SECONDS = (int) (BROKER_TIMEOUT_MS / 1000);
     
     public Controller() {
+        this(ConfigLoader.loadConfig().toRedisConfig());
+    }
+
+    public Controller(RedisConfig redisConfig) {
+        this(openCache(redisConfig));
+    }
+
+    public Controller(ClusterCache clusterCache) {
         this.metadataManager = new MetadataManager();
+        this.clusterCache = clusterCache == null ? DisabledClusterCache.INSTANCE : clusterCache;
         MDC.put("brokerId", "controller");
+    }
+
+    private static ClusterCache openCache(RedisConfig redisConfig) {
+        ClusterCache cache = RedisClusterCache.connect(redisConfig);
+        return cache == null ? DisabledClusterCache.INSTANCE : cache;
     }
     
     /**
@@ -46,21 +64,20 @@ public class Controller {
      * Stops the controller.
      */
     public void stop() {
-        if (!running) {
-            return;
-        }
-        
-        logger.info("Stopping controller");
-        running = false;
-        scheduler.shutdown();
-        try {
-            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+        if (running) {
+            logger.info("Stopping controller");
+            running = false;
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
                 scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            scheduler.shutdownNow();
-            Thread.currentThread().interrupt();
         }
+        clusterCache.close();
     }
     
     /**
@@ -68,14 +85,31 @@ public class Controller {
      */
     public void registerBroker(int brokerId, String host, int port) {
         metadataManager.registerBroker(brokerId, host, port);
+        refreshBrokerKey(brokerId);
         logger.info("Broker registered: id={}, host={}, port={}", brokerId, host, port);
     }
     
     /**
-     * Updates broker heartbeat.
+     * Updates broker heartbeat and refreshes the Redis TTL key when Redis is up.
      */
     public void updateBrokerHeartbeat(int brokerId) {
         metadataManager.updateBrokerHeartbeat(brokerId);
+        refreshBrokerKey(brokerId);
+    }
+
+    private void refreshBrokerKey(int brokerId) {
+        if (!clusterCache.isEnabled()) {
+            return;
+        }
+        MetadataManager.BrokerMetadata metadata = metadataManager.getBrokerMetadata(brokerId);
+        if (metadata == null) {
+            return;
+        }
+        try {
+            clusterCache.touchBroker(metadata.getBrokerId(), metadata.getHost(), metadata.getPort(), BROKER_TTL_SECONDS);
+        } catch (Exception e) {
+            logger.warn("Redis heartbeat refresh failed for broker {}: {}", brokerId, e.getMessage());
+        }
     }
     
     /**
@@ -104,6 +138,7 @@ public class Controller {
                 assignment.getLeaderBrokerId(),
                 assignment.getReplicaBrokerIds()
             );
+            cacheAssignment(assignment);
         }
         
         logger.info("Topic created and partitions assigned: topic={}, partitions={}, replicationFactor={}", 
@@ -116,7 +151,38 @@ public class Controller {
      * Gets partition assignment for a topic and partition.
      */
     public MetadataManager.PartitionAssignment getPartitionAssignment(String topicName, int partitionId) {
-        return metadataManager.getPartitionAssignment(topicName, partitionId);
+        MetadataManager.PartitionAssignment local = metadataManager.getPartitionAssignment(topicName, partitionId);
+        if (local != null || !clusterCache.isEnabled()) {
+            return local;
+        }
+        try {
+            ClusterCache.Assignment cached = clusterCache.getAssignment(topicName, partitionId);
+            if (cached == null) {
+                return null;
+            }
+            metadataManager.assignPartition(topicName, partitionId, cached.getLeaderBrokerId(), cached.getReplicaBrokerIds());
+            return metadataManager.getPartitionAssignment(topicName, partitionId);
+        } catch (Exception e) {
+            logger.warn("Redis assignment read failed for {}-{}: {}", topicName, partitionId, e.getMessage());
+            return null;
+        }
+    }
+
+    private void cacheAssignment(MetadataManager.PartitionAssignment assignment) {
+        if (!clusterCache.isEnabled()) {
+            return;
+        }
+        try {
+            clusterCache.putAssignment(
+                assignment.getTopicName(),
+                assignment.getPartitionId(),
+                assignment.getLeaderBrokerId(),
+                assignment.getReplicaBrokerIds()
+            );
+        } catch (Exception e) {
+            logger.warn("Redis assignment cache write failed for {}-{}: {}",
+                assignment.getTopicName(), assignment.getPartitionId(), e.getMessage());
+        }
     }
     
     /**
@@ -125,6 +191,13 @@ public class Controller {
     public void handleBrokerFailure(int brokerId) {
         logger.warn("Handling broker failure: brokerId={}", brokerId);
         metadataManager.markBrokerDead(brokerId);
+        if (clusterCache.isEnabled()) {
+            try {
+                clusterCache.dropBroker(brokerId);
+            } catch (Exception e) {
+                logger.warn("Redis broker key delete failed for broker {}: {}", brokerId, e.getMessage());
+            }
+        }
         
         // Reassign partitions that were on the failed broker
         List<MetadataManager.BrokerMetadata> aliveBrokers = metadataManager.getAliveBrokers();
@@ -141,16 +214,29 @@ public class Controller {
         if (!running) {
             return;
         }
-        
+        detectDeadBrokers();
+    }
+
+    void detectDeadBrokers() {
         long currentTime = System.currentTimeMillis();
         for (MetadataManager.BrokerMetadata broker : metadataManager.getAllBrokers()) {
-            if (broker.isAlive()) {
-                long timeSinceHeartbeat = currentTime - broker.getLastHeartbeat();
-                if (timeSinceHeartbeat > BROKER_TIMEOUT_MS) {
-                    logger.warn("Broker timeout detected: brokerId={}, timeSinceHeartbeat={}ms", 
-                        broker.getBrokerId(), timeSinceHeartbeat);
-                    handleBrokerFailure(broker.getBrokerId());
+            if (!broker.isAlive()) {
+                continue;
+            }
+            long timeSinceHeartbeat = currentTime - broker.getLastHeartbeat();
+            boolean expiredLocally = timeSinceHeartbeat > BROKER_TIMEOUT_MS;
+            boolean expiredInRedis = false;
+            if (clusterCache.isEnabled()) {
+                try {
+                    expiredInRedis = !clusterCache.isBrokerAlive(broker.getBrokerId());
+                } catch (Exception e) {
+                    logger.warn("Redis liveness check failed for broker {}: {}", broker.getBrokerId(), e.getMessage());
                 }
+            }
+            if (expiredLocally || expiredInRedis) {
+                logger.warn("Broker timeout detected: brokerId={}, timeSinceHeartbeat={}ms, redisExpired={}",
+                    broker.getBrokerId(), timeSinceHeartbeat, expiredInRedis);
+                handleBrokerFailure(broker.getBrokerId());
             }
         }
     }

@@ -14,7 +14,7 @@ public class ConsumerConfig {
     private final long autoCommitIntervalMs;
     private final int fetchMinBytes;
     private final long fetchMaxWaitMs;
-    
+
     public ConsumerConfig(Properties properties) {
         String servers = properties.getProperty("bootstrap.servers", "localhost:9092");
         this.brokerHost = servers.split(":")[0];
@@ -27,7 +27,7 @@ public class ConsumerConfig {
         this.fetchMinBytes = Integer.parseInt(properties.getProperty("fetch.min.bytes", "1"));
         this.fetchMaxWaitMs = Long.parseLong(properties.getProperty("fetch.max.wait.ms", "500"));
     }
-    
+
     public String getBrokerHost() { return brokerHost; }
     public int getBrokerPort() { return brokerPort; }
     public String getGroupId() { return groupId; }
@@ -37,4 +37,3 @@ public class ConsumerConfig {
     public int getFetchMinBytes() { return fetchMinBytes; }
     public long getFetchMaxWaitMs() { return fetchMaxWaitMs; }
 }
-
