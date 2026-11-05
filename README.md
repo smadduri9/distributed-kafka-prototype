@@ -1,6 +1,6 @@
 # KafkaDS: Distributed Message Broker
 
-[![CI](https://github.com/smadduri9/KafkaDS/actions/workflows/ci.yml/badge.svg)](https://github.com/smadduri9/KafkaDS/actions/workflows/ci.yml)
+[![CI](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml/badge.svg)](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml)
 
 KafkaDS is a distributed message broker in Java, inspired by Apache Kafka. It is a
 focused, learning-grade implementation that demonstrates three core distributed-systems
@@ -22,6 +22,7 @@ Implemented (with tests):
 - [x] `acks=1` (leader) and `acks=all` (committed to all replicas) durability
 - [x] Raft: leader election, log replication, commit index, conflict truncation, persistence
 - [x] Raft leadership over the real network with automatic failover
+- [x] Peer discovery: static `id@host:port`, DNS hostname (A/AAAA), or DNS SRV (e.g. a Kubernetes headless service), re-resolved on failure
 - [x] Metrics counters and a produce benchmark
 
 Planned / out of scope (intentionally):
@@ -58,6 +59,8 @@ Single-record latency is dominated by the per-produce `fsync`; throughput improv
 - `com.kafkads.storage` `Log`, `Segment`, `OffsetIndex`, record format
 - `com.kafkads.replication` leader-side replication and high-watermark advancement
 - `com.kafkads.raft` Raft consensus (node, transport, persistence, scheduler)
+- `com.kafkads.discovery` static and DNS-based peer resolution
+- `com.kafkads.config` broker and peer configuration
 - `com.kafkads.broker` node lifecycle, request handling, partitions
 - `com.kafkads.bench` benchmark harness
 
@@ -94,3 +97,4 @@ Each concept is backed by a test that demonstrates it, including failure cases:
 - `RaftConsensusTest` covers election, replication/commit, re-election after leader failure,
   rejection of stale candidates, and conflicting-tail truncation.
 - `RaftFailoverNetworkTest` elects and re-elects a leader over the real Netty transport.
+- `RaftDnsReResolutionTest` re-resolves a peer that moves to a new address and checks the cluster reconverges.
