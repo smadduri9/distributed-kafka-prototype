@@ -4,6 +4,7 @@ import com.kafkads.protocol.Message;
 import com.kafkads.protocol.Side;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -13,6 +14,8 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 
+import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -29,6 +32,17 @@ public class Client implements AutoCloseable {
     private Channel channel;
 
     public void connect(String host, int port) throws InterruptedException {
+        connect(List.of(InetSocketAddress.createUnresolved(host, port)));
+    }
+
+    /**
+     * Connects to the first reachable address, trying each in order (dual-stack /
+     * multi-A fallback). Throws with the last failure if none are reachable.
+     */
+    public void connect(List<InetSocketAddress> addresses) throws InterruptedException {
+        if (addresses.isEmpty()) {
+            throw new IllegalArgumentException("No addresses to connect to");
+        }
         Bootstrap bootstrap = new Bootstrap();
         bootstrap.group(group)
                 .channel(NioSocketChannel.class)
@@ -39,7 +53,17 @@ public class Client implements AutoCloseable {
                         Framing.configure(ch.pipeline(), Side.CLIENT, new InboundHandler());
                     }
                 });
-        channel = bootstrap.connect(host, port).sync().channel();
+        Throwable lastFailure = null;
+        for (InetSocketAddress address : addresses) {
+            ChannelFuture future = bootstrap.connect(address);
+            future.await();
+            if (future.isSuccess()) {
+                channel = future.channel();
+                return;
+            }
+            lastFailure = future.cause();
+        }
+        throw new IllegalStateException("Failed to connect to any of " + addresses, lastFailure);
     }
 
     public CompletableFuture<Message> send(Message request) {

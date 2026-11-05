@@ -2,6 +2,10 @@ package com.kafkads.broker;
 
 import com.kafkads.config.BrokerConfig;
 import com.kafkads.config.PeerConfig;
+import com.kafkads.discovery.DnsLookup;
+import com.kafkads.discovery.DnsPeerResolver;
+import com.kafkads.discovery.PeerResolver;
+import com.kafkads.discovery.StaticPeerResolver;
 import com.kafkads.metrics.Metrics;
 import com.kafkads.network.Server;
 import com.kafkads.protocol.Acks;
@@ -58,14 +62,25 @@ public class Broker implements AutoCloseable {
     private RaftScheduler raftScheduler;
     private NetworkRaftTransport raftTransport;
     private FileRaftPersistence raftPersistence;
+    private final PeerResolver peerResolver;
 
     public Broker(BrokerConfig config) {
+        this(config, null);
+    }
+
+    /** Test seam: a non-null {@code peerResolverOverride} replaces the config-derived resolver. */
+    public Broker(BrokerConfig config, PeerResolver peerResolverOverride) {
         this.config = config;
         this.server = new Server(config.port(), () -> new RequestHandler(this));
         this.leaderId = computeLeaderId(config);
-        this.followerIds = config.peers().stream()
-                .map(PeerConfig::nodeId)
-                .collect(Collectors.toSet());
+        this.peerResolver = peerResolverOverride != null
+                ? peerResolverOverride
+                : (config.raftEnabled() ? createResolver(config) : null);
+        this.followerIds = peerResolver != null
+                ? peerResolver.peerIds()
+                : config.peers().stream()
+                        .map(PeerConfig::nodeId)
+                        .collect(Collectors.toSet());
         try {
             for (int id = 0; id < config.partitionCount(); id++) {
                 Path dir = Path.of(config.logDir()).resolve("partition-" + id);
@@ -81,8 +96,26 @@ public class Broker implements AutoCloseable {
         }
     }
 
+    /** Builds the peer resolver selected by {@code raft.discovery.mode}. */
+    private static PeerResolver createResolver(BrokerConfig config) {
+        DnsPeerResolver.IpPreference ipPreference =
+                "ipv6".equalsIgnoreCase(config.discoveryIpPreference())
+                        ? DnsPeerResolver.IpPreference.IPV6
+                        : DnsPeerResolver.IpPreference.IPV4;
+        return switch (config.discoveryMode()) {
+            case "dns-srv" -> DnsPeerResolver.forSrv(
+                    DnsLookup.system(), config.discoverySrvName(), config.discoveryHostnamePrefix(),
+                    config.nodeId(), config.discoveryTtlMinMs(), config.discoveryTtlMaxMs(),
+                    ipPreference);
+            case "dns-hostname" -> DnsPeerResolver.forHostnames(
+                    DnsLookup.system(), config.peers(),
+                    config.discoveryTtlMinMs(), config.discoveryTtlMaxMs(), ipPreference);
+            default -> new StaticPeerResolver(config.peers());
+        };
+    }
+
     private void buildRaft() throws IOException {
-        this.raftTransport = new NetworkRaftTransport(config.peers());
+        this.raftTransport = new NetworkRaftTransport(peerResolver);
         this.raftPersistence = new FileRaftPersistence(Path.of(config.logDir()).resolve("raft"));
         this.raftNode = new RaftNode(
                 config.nodeId(), followerIds, raftTransport, raftPersistence,
@@ -268,6 +301,9 @@ public class Broker implements AutoCloseable {
         }
         if (raftTransport != null) {
             raftTransport.close();
+        }
+        if (peerResolver != null) {
+            peerResolver.close();
         }
         server.close();
         if (raftPersistence != null) {
