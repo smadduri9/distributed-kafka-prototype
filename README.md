@@ -35,13 +35,14 @@ Planned / out of scope (intentionally):
 
 ## Benchmark
 
-Single broker, 128-byte records, `acks=1` with an fsync per produce, loopback, JDK on an
-Apple Silicon laptop (`java -cp target/kafkads.jar com.kafkads.bench.Benchmark`):
+Single broker, 128-byte records, `acks=1` with an fsync per produce, loopback, JDK 17 on an
+Apple M4 Pro laptop (`java -cp target/kafkads.jar com.kafkads.bench.Benchmark`). Median of 3 runs,
+with the range in brackets:
 
 | Metric | Result |
 | --- | --- |
-| Throughput (batch=500) | ~86,000 records/sec (~10.5 MB/sec) |
-| Produce latency, single record | p50 ~4.0 ms, p99 ~5.1 ms |
+| Throughput (batch=500) | ~86,000 records/sec, 10.5 MB/sec [82,087–97,070] |
+| Produce latency, single record | p50 ~4.0 ms [4.04–4.06], p99 ~5.4 ms [5.24–5.90] |
 | Leader failover | new leader elected within the election timeout (150-300 ms), verified by test |
 
 Single-record latency is dominated by the per-produce `fsync`; throughput improves with batching.
