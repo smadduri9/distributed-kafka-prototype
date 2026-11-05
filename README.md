@@ -1,6 +1,6 @@
 # KafkaDS: Distributed Message Broker
 
-[![CI](https://github.com/smadduri9/KafkaDS/actions/workflows/ci.yml/badge.svg)](https://github.com/smadduri9/KafkaDS/actions/workflows/ci.yml)
+[![CI](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml/badge.svg)](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml)
 
 KafkaDS is a distributed message broker in Java, inspired by Apache Kafka. It is a
 focused, learning-grade implementation that demonstrates three core distributed-systems
@@ -22,6 +22,7 @@ Implemented (with tests):
 - [x] `acks=1` (leader) and `acks=all` (committed to all replicas) durability
 - [x] Raft: leader election, log replication, commit index, conflict truncation, persistence
 - [x] Raft leadership over the real network with automatic failover
+- [x] Peer discovery: static `id@host:port`, DNS hostname (A/AAAA), or DNS SRV (e.g. a Kubernetes headless service), re-resolved on failure
 - [x] Metrics counters and a produce benchmark
 
 Planned / out of scope (intentionally):
@@ -34,13 +35,14 @@ Planned / out of scope (intentionally):
 
 ## Benchmark
 
-Single broker, 128-byte records, `acks=1` with an fsync per produce, loopback, JDK on an
-Apple Silicon laptop (`java -cp target/kafkads.jar com.kafkads.bench.Benchmark`):
+Single broker, 128-byte records, `acks=1` with an fsync per produce, loopback, JDK 17 on an
+Apple M4 Pro laptop (`java -cp target/kafkads.jar com.kafkads.bench.Benchmark`). Median of 3 runs,
+with the range in brackets:
 
 | Metric | Result |
 | --- | --- |
-| Throughput (batch=500) | ~86,000 records/sec (~10.5 MB/sec) |
-| Produce latency, single record | p50 ~4.0 ms, p99 ~5.1 ms |
+| Throughput (batch=500) | ~86,000 records/sec, 10.5 MB/sec [82,087–97,070] |
+| Produce latency, single record | p50 ~4.0 ms [4.04–4.06], p99 ~5.4 ms [5.24–5.90] |
 | Leader failover | new leader elected within the election timeout (150-300 ms), verified by test |
 
 Single-record latency is dominated by the per-produce `fsync`; throughput improves with batching.
@@ -58,6 +60,8 @@ Single-record latency is dominated by the per-produce `fsync`; throughput improv
 - `com.kafkads.storage` `Log`, `Segment`, `OffsetIndex`, record format
 - `com.kafkads.replication` leader-side replication and high-watermark advancement
 - `com.kafkads.raft` Raft consensus (node, transport, persistence, scheduler)
+- `com.kafkads.discovery` static and DNS-based peer resolution
+- `com.kafkads.config` broker and peer configuration
 - `com.kafkads.broker` node lifecycle, request handling, partitions
 - `com.kafkads.bench` benchmark harness
 
@@ -94,3 +98,4 @@ Each concept is backed by a test that demonstrates it, including failure cases:
 - `RaftConsensusTest` covers election, replication/commit, re-election after leader failure,
   rejection of stale candidates, and conflicting-tail truncation.
 - `RaftFailoverNetworkTest` elects and re-elects a leader over the real Netty transport.
+- `RaftDnsReResolutionTest` re-resolves a peer that moves to a new address and checks the cluster reconverges.
