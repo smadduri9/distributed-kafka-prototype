@@ -1,6 +1,9 @@
 package com.kafkads.raft;
 
 import com.kafkads.config.PeerConfig;
+import com.kafkads.discovery.PeerResolver;
+import com.kafkads.discovery.ResolvedPeer;
+import com.kafkads.discovery.StaticPeerResolver;
 import com.kafkads.network.Client;
 import com.kafkads.raft.messages.AppendEntriesRequest;
 import com.kafkads.raft.messages.AppendEntriesResponse;
@@ -13,28 +16,40 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Raft transport over the KafkaDS Netty protocol. Maintains one lazily-established
- * client connection per peer and reconnects after failures. RPC responses arrive on
- * Netty threads and complete the returned futures.
+ * client connection per peer and reconnects after failures. Peer addresses come from
+ * a pluggable {@link PeerResolver} (static config or DNS discovery); on connection
+ * failure the resolver entry is invalidated so the next attempt re-resolves, picking
+ * up peers that moved to a new address (e.g. a rescheduled pod). RPC responses arrive
+ * on Netty threads and complete the returned futures.
  */
 public final class NetworkRaftTransport implements RaftTransport, AutoCloseable {
 
-    private final Map<Integer, PeerConfig> peers = new ConcurrentHashMap<>();
+    private final PeerResolver resolver;
     private final Map<Integer, Client> clients = new ConcurrentHashMap<>();
 
-    public NetworkRaftTransport(Iterable<PeerConfig> peerConfigs) {
-        for (PeerConfig p : peerConfigs) {
-            peers.put(p.nodeId(), p);
-        }
+    public NetworkRaftTransport(PeerResolver resolver) {
+        this.resolver = resolver;
     }
 
-    private synchronized Client clientFor(int peerId) throws InterruptedException {
+    /** Convenience constructor for the static {@code id@host:port} peer list. */
+    public NetworkRaftTransport(Iterable<PeerConfig> peerConfigs) {
+        this(new StaticPeerResolver(peerConfigs));
+    }
+
+    private synchronized Client clientFor(int peerId) throws Exception {
         Client existing = clients.get(peerId);
         if (existing != null) {
             return existing;
         }
-        PeerConfig cfg = peers.get(peerId);
+        ResolvedPeer resolved = resolver.resolve(peerId);
         Client client = new Client();
-        client.connect(cfg.host(), cfg.port());
+        try {
+            client.connect(resolved.addresses());
+        } catch (Exception e) {
+            client.close();
+            resolver.invalidate(peerId);
+            throw e;
+        }
         clients.put(peerId, client);
         return client;
     }
@@ -44,6 +59,9 @@ public final class NetworkRaftTransport implements RaftTransport, AutoCloseable 
         if (client != null) {
             client.close();
         }
+        // Force a fresh DNS resolution on the next connect: the peer may have
+        // moved to a new address (pod restart / reschedule).
+        resolver.invalidate(peerId);
     }
 
     @Override
