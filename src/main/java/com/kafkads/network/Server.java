@@ -11,11 +11,13 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 /**
- * A Netty TCP server speaking the KafkaDS binary protocol. A fresh business
- * handler is created per connection via the supplied factory.
+ * A Netty TCP server speaking the KafkaDS binary protocol. A fresh business handler is
+ * created per connection via the supplied factory; it receives decoded
+ * {@link com.kafkads.protocol.Frame}s.
  */
 public class Server implements AutoCloseable {
 
@@ -24,6 +26,7 @@ public class Server implements AutoCloseable {
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
     private Channel channel;
+    private boolean closed;
 
     public Server(int port, Supplier<ChannelHandler> handlerFactory) {
         this.port = port;
@@ -32,11 +35,12 @@ public class Server implements AutoCloseable {
 
     public void start() throws InterruptedException {
         bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup();
+        workerGroup = new NioEventLoopGroup(Math.min(4, Runtime.getRuntime().availableProcessors()));
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
                 .channel(NioServerSocketChannel.class)
                 .option(ChannelOption.SO_BACKLOG, 128)
+                .option(ChannelOption.SO_REUSEADDR, true)
                 .childOption(ChannelOption.TCP_NODELAY, true)
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
@@ -52,7 +56,11 @@ public class Server implements AutoCloseable {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         try {
             if (channel != null) {
                 channel.close().sync();
@@ -60,11 +68,16 @@ public class Server implements AutoCloseable {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
+            // Shutting the worker group down closes every accepted connection.
             if (bossGroup != null) {
-                bossGroup.shutdownGracefully();
+                bossGroup.shutdownGracefully(0, 200, TimeUnit.MILLISECONDS);
             }
             if (workerGroup != null) {
-                workerGroup.shutdownGracefully();
+                try {
+                    workerGroup.shutdownGracefully(0, 200, TimeUnit.MILLISECONDS).sync();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }

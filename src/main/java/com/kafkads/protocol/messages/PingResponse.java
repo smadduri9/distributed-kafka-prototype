@@ -27,6 +27,6 @@ public final class PingResponse implements Message {
     }
 
     public static PingResponse decode(ByteBuf in) {
-        return new PingResponse(in.readLong());
+        return new PingResponse(Message.readLong(in));
     }
 }

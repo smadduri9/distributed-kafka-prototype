@@ -4,6 +4,7 @@ import com.kafkads.protocol.ApiKey;
 import com.kafkads.protocol.Message;
 import io.netty.buffer.ByteBuf;
 
+/** Reads committed records of one partition starting at an explicit offset. */
 public final class FetchRequest implements Message {
 
     private final int partition;
@@ -41,9 +42,6 @@ public final class FetchRequest implements Message {
     }
 
     public static FetchRequest decode(ByteBuf in) {
-        int partition = in.readInt();
-        long fromOffset = in.readLong();
-        int maxBytes = in.readInt();
-        return new FetchRequest(partition, fromOffset, maxBytes);
+        return new FetchRequest(Message.readInt(in), Message.readLong(in), Message.readInt(in));
     }
 }

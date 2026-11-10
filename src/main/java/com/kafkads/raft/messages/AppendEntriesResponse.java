@@ -4,6 +4,11 @@ import com.kafkads.protocol.ApiKey;
 import com.kafkads.protocol.Message;
 import io.netty.buffer.ByteBuf;
 
+/**
+ * Raft AppendEntries reply. On success {@code matchIndex} is the last index the follower
+ * verified against the leader in this request. On failure it is the follower's last log
+ * index, which lets the leader skip back quickly instead of one entry per round trip.
+ */
 public final class AppendEntriesResponse implements Message {
 
     private final int term;
@@ -41,6 +46,6 @@ public final class AppendEntriesResponse implements Message {
     }
 
     public static AppendEntriesResponse decode(ByteBuf in) {
-        return new AppendEntriesResponse(in.readInt(), in.readBoolean(), in.readLong());
+        return new AppendEntriesResponse(Message.readInt(in), Message.readByte(in) != 0, Message.readLong(in));
     }
 }
