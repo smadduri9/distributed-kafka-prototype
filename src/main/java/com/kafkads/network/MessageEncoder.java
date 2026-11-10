@@ -1,19 +1,17 @@
 package com.kafkads.network;
 
-import com.kafkads.protocol.Message;
+import com.kafkads.protocol.Frame;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToByteEncoder;
 
-/**
- * Writes [api-key byte][payload]. The 4-byte length prefix is added by a
- * LengthFieldPrepender placed earlier in the pipeline (toward the head).
- */
-public class MessageEncoder extends MessageToByteEncoder<Message> {
+/** Writes {@code apiKey(1) correlationId(4) payload}; the length prefix is added downstream. */
+public class MessageEncoder extends MessageToByteEncoder<Frame> {
 
     @Override
-    protected void encode(ChannelHandlerContext ctx, Message msg, ByteBuf out) {
-        out.writeByte(msg.apiKey().code());
-        msg.encode(out);
+    protected void encode(ChannelHandlerContext ctx, Frame frame, ByteBuf out) {
+        out.writeByte(frame.message().apiKey().code());
+        out.writeInt(frame.correlationId());
+        frame.message().encode(out);
     }
 }

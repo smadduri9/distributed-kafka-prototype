@@ -23,7 +23,9 @@ public final class BrokerConfig {
     private final int electionTimeoutMinMs;
     private final int electionTimeoutMaxMs;
     private final int heartbeatIntervalMs;
-    private final boolean raftEnabled;
+    private final int replicationFactor;
+    private final String partitionAssignment;
+    private final int produceTimeoutMs;
     private final String discoveryMode;
     private final String discoverySrvName;
     private final String discoveryHostnamePrefix;
@@ -43,7 +45,17 @@ public final class BrokerConfig {
         this.electionTimeoutMinMs = intOrDefault(p, "raft.election.timeout.min.ms", 500);
         this.electionTimeoutMaxMs = intOrDefault(p, "raft.election.timeout.max.ms", 1000);
         this.heartbeatIntervalMs = intOrDefault(p, "raft.heartbeat.interval.ms", 150);
-        this.raftEnabled = Boolean.parseBoolean(p.getProperty("raft.enabled", "false").trim());
+        this.replicationFactor = intOrDefault(p, "replication.factor", 3);
+        this.partitionAssignment = p.getProperty("partition.assignment", "").trim();
+        this.produceTimeoutMs = intOrDefault(p, "produce.timeout.ms", 3000);
+        if (partitionCount < 1 || replicationFactor < 1) {
+            throw new IllegalArgumentException("partition.count and replication.factor must be >= 1");
+        }
+        if (electionTimeoutMinMs <= 0 || electionTimeoutMaxMs < electionTimeoutMinMs
+                || heartbeatIntervalMs <= 0 || heartbeatIntervalMs >= electionTimeoutMinMs) {
+            throw new IllegalArgumentException(
+                    "Raft timing must satisfy 0 < heartbeat < election.min <= election.max");
+        }
         this.discoveryMode = p.getProperty("raft.discovery.mode", "static").trim();
         this.discoverySrvName = p.getProperty("raft.discovery.srv.name", "").trim();
         this.discoveryHostnamePrefix = p.getProperty("raft.discovery.hostname.prefix", "broker-").trim();
@@ -142,8 +154,25 @@ public final class BrokerConfig {
         return heartbeatIntervalMs;
     }
 
-    public boolean raftEnabled() {
-        return raftEnabled;
+    /**
+     * Desired replicas per partition. The effective value is capped at the number of
+     * brokers in the cluster.
+     */
+    public int replicationFactor() {
+        return replicationFactor;
+    }
+
+    /**
+     * Optional explicit assignment, e.g. {@code 0:1,2,3;1:2,3,1}: partition id, then its
+     * replica broker ids with the preferred leader first. Empty means "derive it".
+     */
+    public String partitionAssignment() {
+        return partitionAssignment;
+    }
+
+    /** How long a produce with acks=QUORUM or acks=ALL waits before answering "uncertain". */
+    public int produceTimeoutMs() {
+        return produceTimeoutMs;
     }
 
     /** Peer discovery mode: {@code static}, {@code dns-hostname}, or {@code dns-srv}. */

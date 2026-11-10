@@ -1,21 +1,22 @@
 package com.kafkads.bench;
 
 import com.kafkads.broker.Broker;
+import com.kafkads.client.Producer;
 import com.kafkads.config.BrokerConfig;
-import com.kafkads.network.Client;
 import com.kafkads.protocol.Acks;
-import com.kafkads.protocol.messages.ProduceRequest;
 
+import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
-import java.util.concurrent.TimeUnit;
 
 /**
- * A small single-broker load test that reports produce throughput and latency.
+ * A small single-broker load test that reports produce throughput and latency through
+ * the public {@link Producer}. Broker and client share one JVM and talk over loopback,
+ * so the numbers describe this code path on this machine and nothing more.
  * Run with: java -cp target/kafkads.jar com.kafkads.bench.Benchmark [records] [recordBytes] [batch]
  */
 public final class Benchmark {
@@ -27,24 +28,25 @@ public final class Benchmark {
         int totalRecords = args.length > 0 ? Integer.parseInt(args[0]) : 500_000;
         int recordBytes = args.length > 1 ? Integer.parseInt(args[1]) : 128;
         int batchSize = args.length > 2 ? Integer.parseInt(args[2]) : 500;
-        int latencySamples = 20_000;
+        int latencySamples = 5_000;
 
         Path dataDir = Files.createTempDirectory("kafkads-bench");
         Properties p = new Properties();
         p.setProperty("node.id", "1");
         p.setProperty("port", "29099");
         p.setProperty("log.dir", dataDir.toString());
+        p.setProperty("raft.election.timeout.min.ms", "100");
+        p.setProperty("raft.election.timeout.max.ms", "200");
+        p.setProperty("raft.heartbeat.interval.ms", "30");
         Broker broker = new Broker(BrokerConfig.fromProperties(p));
         broker.start();
-        broker.startReplication();
+        broker.startRaft();
 
-        try (Client client = new Client()) {
-            client.connect("127.0.0.1", 29099);
-
+        try (Producer producer = new Producer(
+                List.of(new InetSocketAddress("127.0.0.1", 29099)), 30_000, 60_000)) {
             byte[] payload = new byte[recordBytes];
             Arrays.fill(payload, (byte) 'x');
 
-            // Throughput phase: batched produce.
             List<byte[]> batch = new ArrayList<>(batchSize);
             for (int i = 0; i < batchSize; i++) {
                 batch.add(payload);
@@ -52,27 +54,24 @@ public final class Benchmark {
             long produced = 0;
             long start = System.nanoTime();
             while (produced < totalRecords) {
-                client.sendAndWait(new ProduceRequest(0, Acks.LEADER, batch), 30, TimeUnit.SECONDS);
+                producer.send(0, batch, Acks.QUORUM);
                 produced += batchSize;
             }
-            long elapsedNs = System.nanoTime() - start;
-            double seconds = elapsedNs / 1e9;
-            double recsPerSec = produced / seconds;
-            double mbPerSec = (produced * (double) recordBytes) / (1024 * 1024) / seconds;
+            double seconds = (System.nanoTime() - start) / 1e9;
 
-            // Latency phase: single-record produce.
             long[] latencies = new long[latencySamples];
             List<byte[]> single = List.of(payload);
             for (int i = 0; i < latencySamples; i++) {
                 long t0 = System.nanoTime();
-                client.sendAndWait(new ProduceRequest(0, Acks.LEADER, single), 30, TimeUnit.SECONDS);
+                producer.send(0, single, Acks.QUORUM);
                 latencies[i] = System.nanoTime() - t0;
             }
             Arrays.sort(latencies);
 
-            System.out.println("=== KafkaDS benchmark ===");
+            System.out.println("=== KafkaDS benchmark (single broker, acks=QUORUM, fsync per request) ===");
             System.out.printf("records=%d recordBytes=%d batch=%d%n", produced, recordBytes, batchSize);
-            System.out.printf("throughput: %.0f records/sec, %.1f MB/sec%n", recsPerSec, mbPerSec);
+            System.out.printf("throughput: %.0f records/sec, %.1f MB/sec%n",
+                    produced / seconds, (produced * (double) recordBytes) / (1024 * 1024) / seconds);
             System.out.printf("produce latency (single record): p50=%.3f ms, p99=%.3f ms, max=%.3f ms%n",
                     latencies[latencySamples / 2] / 1e6,
                     latencies[(int) (latencySamples * 0.99)] / 1e6,

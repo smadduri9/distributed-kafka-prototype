@@ -34,6 +34,6 @@ public final class RequestVoteResponse implements Message {
     }
 
     public static RequestVoteResponse decode(ByteBuf in) {
-        return new RequestVoteResponse(in.readInt(), in.readBoolean());
+        return new RequestVoteResponse(Message.readInt(in), Message.readByte(in) != 0);
     }
 }
