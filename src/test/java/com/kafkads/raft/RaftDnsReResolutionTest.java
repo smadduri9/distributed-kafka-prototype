@@ -6,7 +6,7 @@ import com.kafkads.discovery.PeerResolutionException;
 import com.kafkads.discovery.PeerResolver;
 import com.kafkads.discovery.ResolvedPeer;
 import com.kafkads.network.Server;
-import com.kafkads.protocol.Message;
+import com.kafkads.protocol.Frame;
 import com.kafkads.raft.messages.RequestVoteRequest;
 import com.kafkads.raft.messages.RequestVoteResponse;
 import io.netty.channel.ChannelHandlerContext;
@@ -115,12 +115,13 @@ class RaftDnsReResolutionTest {
     // ---- transport-level: the strict proof of drop -> invalidate -> re-resolve ----
 
     /** A server-side handler that grants every vote request. */
-    private static SimpleChannelInboundHandler<Message> voteGranter() {
+    private static SimpleChannelInboundHandler<Frame> voteGranter() {
         return new SimpleChannelInboundHandler<>() {
             @Override
-            protected void channelRead0(ChannelHandlerContext ctx, Message msg) {
-                if (msg instanceof RequestVoteRequest req) {
-                    ctx.writeAndFlush(new RequestVoteResponse(req.term(), true));
+            protected void channelRead0(ChannelHandlerContext ctx, Frame frame) {
+                if (frame.message() instanceof RequestVoteRequest req) {
+                    ctx.writeAndFlush(new Frame(frame.correlationId(),
+                            new RequestVoteResponse(req.term(), true)));
                 }
             }
         };
@@ -139,7 +140,7 @@ class RaftDnsReResolutionTest {
         NetworkRaftTransport transport = new NetworkRaftTransport(resolver);
         toClose.add(transport);
 
-        RequestVoteRequest req = new RequestVoteRequest(1, 1, 0, 0);
+        RequestVoteRequest req = new RequestVoteRequest(0, 1, 1, 0, 0);
         RequestVoteResponse first = transport.requestVote(2, req).get(5, TimeUnit.SECONDS);
         assertTrue(first.voteGranted());
         assertEquals(1, resolver.resolves(2));

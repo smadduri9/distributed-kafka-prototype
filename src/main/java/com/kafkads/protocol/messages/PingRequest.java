@@ -27,6 +27,6 @@ public final class PingRequest implements Message {
     }
 
     public static PingRequest decode(ByteBuf in) {
-        return new PingRequest(in.readLong());
+        return new PingRequest(Message.readLong(in));
     }
 }
