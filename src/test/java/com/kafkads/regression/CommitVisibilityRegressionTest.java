@@ -29,15 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Regression tests for three defects found in review of the earlier design, in which
- * static leader-follower replication and Raft election were separate modes. Each test
- * was first written against that design and failed there (see the commit that introduced
- * this file); the scenarios are restated here for the single integrated design, with the
- * same assertions about what a client may observe.
+ * Regression tests for three properties of the acknowledgment and visibility contract:
+ * acks=ALL covers the last record of a batch, a restart never makes uncommitted records
+ * visible, and acknowledged writes are replicated and readable.
  *
  * <p>Three brokers in one JVM over loopback sockets.
  */
-class ReportedDefectsTest {
+class CommitVisibilityRegressionTest {
 
     @TempDir
     Path tmp;
@@ -46,11 +44,7 @@ class ReportedDefectsTest {
         return (ProduceResponse) client.sendAndWait(new ProduceRequest(0, acks, values), 10, TimeUnit.SECONDS);
     }
 
-    /**
-     * Defect 1: acks=all compared the exclusive high-watermark with the batch's last
-     * offset, so the last record of a batch (and therefore any single-record batch) was
-     * acknowledged without being replicated.
-     */
+    /** acks=ALL must wait for every record of the batch, including the last (and only) one. */
     @Test
     void acksAllSingleRecordIsNotAcknowledgedWithoutFollowers() throws Exception {
         try (TestBrokers cluster = new TestBrokers(tmp, 19601, 3, 1, 3).startAll()) {
@@ -79,8 +73,7 @@ class ReportedDefectsTest {
     }
 
     /**
-     * Defect 2: the high-watermark was initialised to the log end on start-up, so records
-     * that were never committed became visible after a restart.
+     * Records that were never committed must stay invisible after a restart.
      *
      * <p>The on-disk state is built directly: a replica whose log holds five records of
      * term 1 that no other replica has. That is exactly what a leader that appended
@@ -124,10 +117,7 @@ class ReportedDefectsTest {
         }
     }
 
-    /**
-     * Defect 3: with Raft-elected leadership, client writes were appended only to the
-     * leader's local log; nothing replicated them and consumers could not read them.
-     */
+    /** An acknowledged write is replicated to every replica and readable from the leader. */
     @Test
     void raftModeReplicatesClientWrites() throws Exception {
         try (TestBrokers cluster = new TestBrokers(tmp, 19621, 3, 1, 3).startAll()) {

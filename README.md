@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml/badge.svg)](https://github.com/smadduri9/distributed-kafka-prototype/actions/workflows/ci.yml)
 
-KafkaDS is a Kafka-style message broker prototype written in Java 17 on Netty. It is a learning and portfolio project. It is not Kafka-compatible, and it is not production software.
+KafkaDS is a Kafka-style message broker prototype written in Java 17 on Netty. It is a prototype: it is not Kafka-compatible, and it is not production software.
 
 ## What it does
 
@@ -31,7 +31,7 @@ A batch that is acknowledged or rejected was appended whole or not at all, with 
 - Records acknowledged with `quorum` are still readable after the leader of their partition is killed with SIGKILL, and a new leader takes over (`MultiProcessFailoverTest`).
 - Writes continue to commit with one broker down, and a restarted broker converges to the leader's log with no record stored twice (`MultiProcessFailoverTest`, `ClusterIntegrationTest`).
 - A minority of brokers cannot commit writes (`ClusterIntegrationTest`, `RaftConsensusTest`).
-- A restart does not expose records that were never committed (`ReportedDefectsTest`, `RaftConsensusTest`).
+- A restart does not expose records that were never committed (`CommitVisibilityRegressionTest`, `RaftConsensusTest`).
 - Malformed or oversized frames get an `INVALID_REQUEST` error and the connection is closed (`ProtocolRobustnessTest`).
 - With concurrent producers and consumers, every acknowledged record is stored once and each response reaches the request that caused it (`ClusterIntegrationTest`, `ClientCorrelationTest`).
 - A log with 1,000,000 records can be closed, reopened and read back in full (`MillionRecordRestartTest`).
@@ -138,7 +138,7 @@ One recorded run of the script took about 77 seconds.
 | `ProtocolRobustnessTest` (7) | Real sockets, one broker, hand-built frames from a raw socket | Malformed or oversized frames get `INVALID_REQUEST` and the connection closes |
 | `ClientCorrelationTest` (6) | Real sockets, scripted server | Responses are matched to requests by correlation ID; pending requests are bounded and fail when the connection is lost |
 | `ClusterIntegrationTest` (10) | Several brokers in one JVM over loopback, graceful `close()` | Partitions with independent offsets, acknowledgment modes at single and multi-record boundaries, a minority cannot commit, concurrent clients, leader shutdown |
-| `ReportedDefectsTest` (3) | Several brokers in one JVM over loopback, graceful `close()` | Regression tests for three reported defects, including that a restart does not expose uncommitted records |
+| `CommitVisibilityRegressionTest` (3) | Several brokers in one JVM over loopback, graceful `close()` | Regression tests: `acks=all` waits for the last record of a batch, a restart does not expose uncommitted records, and client writes are replicated |
 | `RaftFailoverNetworkTest` (1) | Several brokers in one JVM over loopback, graceful `close()` | A leader is elected over Netty, and a new leader with a higher term takes over after the old one stops |
 | `RaftDnsReResolutionTest` (2) | Several brokers in one JVM over loopback, graceful `close()` | A peer moves to a new address; the transport re-resolves it and the cluster reconverges |
 | `MultiProcessFailoverTest` (1) | Separate OS processes, SIGKILL | Records committed before the leader is killed remain readable from the new leader; the restarted broker converges with no duplicates |
@@ -158,6 +158,6 @@ One recorded run of the script took about 77 seconds.
 | `com.kafkads.discovery` | Static and DNS peer resolution |
 | `com.kafkads.config` | `BrokerConfig` and `PeerConfig` |
 | `com.kafkads.metrics` | `Metrics`, four in-process counters |
-| `com.kafkads.bench` | `Benchmark`, a single-broker produce benchmark. Measured results and their limits are in `docs/HANDOFF.md`. |
+| `com.kafkads.bench` | `Benchmark`, a single-broker produce benchmark. Measured results and their limits are in `docs/TESTING.md`. |
 
-Design notes are in [docs/DESIGN.md](docs/DESIGN.md), and the handoff notes are in [docs/HANDOFF.md](docs/HANDOFF.md).
+Design notes are in [docs/DESIGN.md](docs/DESIGN.md). Test evidence and measurements are in [docs/TESTING.md](docs/TESTING.md).

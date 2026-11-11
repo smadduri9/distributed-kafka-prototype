@@ -469,4 +469,4 @@ gets `NOT_REPLICA` or `UNKNOWN_PARTITION`. Protocol bounds (in-flight limit, que
 - No idempotent producer and no sequence numbers. Delivery is at-least-once or at-most-once, never exactly-once.
 - No TLS, no authentication, no idle-connection timeout, and no flow control through channel writability.
 - Metrics are four in-process counters with no exporter.
-- The only benchmark is single-broker and unreplicated (results in `docs/HANDOFF.md`). No replicated benchmark has been run.
+- The only benchmark is single-broker and unreplicated (results in `docs/TESTING.md`). No replicated benchmark has been run.
